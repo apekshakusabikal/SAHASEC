@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sahasec – ICU Patient Monitor</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:#e5e7eb;font:14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+.w{max-width:900px;margin:0 auto;padding:10px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 4px}
+.top b{font-size:18px;letter-spacing:1px}.mu{color:#8b98a6;font-size:12px}
+.mon{border:3px solid #1f2937;border-radius:10px;background:#050806;overflow:hidden}
+.mon.alarm{animation:bd .5s infinite alternate}
+@keyframes bd{from{border-color:#7f1d1d}to{border-color:#ef4444}}
+.al{padding:6px 10px;font-weight:700;font-size:13px;background:#111;color:#22c55e;min-height:30px}
+.al.r{background:#dc2626;color:#fff;animation:bl .5s infinite alternate}.al.y{background:#d97706;color:#000}
+@keyframes bl{to{background:#7f1d1d}}
+.lane{display:flex;border-top:1px solid #1a2a1f;background-image:linear-gradient(#0f1f14 1px,transparent 1px),linear-gradient(90deg,#0f1f14 1px,transparent 1px);background-size:20px 20px}
+.lane canvas{flex:1;min-width:0;height:96px;display:block}
+.num{width:112px;padding:6px 8px;text-align:right;border-left:1px solid #1a2a1f;display:flex;flex-direction:column;justify-content:center}
+.num .l{font-size:11px;font-weight:700}.num .n{font-size:40px;font-weight:700;line-height:1}.num .u{font-size:11px;color:#8b98a6}
+.bad .n{color:#ef4444!important;animation:bl2 .6s infinite alternate}@keyframes bl2{to{opacity:.35}}
+.bot{display:flex;border-top:1px solid #1a2a1f}.bot>div{flex:1;padding:8px 10px;text-align:center}
+.bot .n{font-size:30px;font-weight:700}
+.card{background:#0d141b;border:1px solid #243140;border-radius:10px;padding:12px;margin-top:10px}
+h2{font-size:15px;margin:0 0 8px}
+button{font:inherit;border:1px solid #2b3a4a;background:#16212c;color:#e5e7eb;border-radius:8px;padding:8px 11px;cursor:pointer}
+button.p{background:#2563eb;border-color:#2563eb}button.d{background:#dc2626;border-color:#dc2626}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+input{font:inherit;padding:8px;border:1px solid #2b3a4a;border-radius:8px;background:#05090d;color:#e5e7eb;flex:1;min-width:150px}
+pre{white-space:pre-wrap;background:#05090d;border:1px solid #243140;border-radius:8px;padding:10px;font-size:13px}
+svg{width:100%;height:auto;display:block}.sc{overflow-x:auto}
+.banner{border-radius:8px;padding:8px 12px;font-weight:700;display:flex;justify-content:space-between;margin:8px 0}
+.s0{background:#15803d}.s1{background:#b45309}.s2{background:#b91c1c}
+</style></head><body><div class="w">
+<div class="top"><div><b>SAHASEC</b> <span class="mu">ICU Patient Monitor</span><div class="mu" id="clock"></div></div>
+<div class="row" style="margin:0"><button id="espBtn">🔌 Connect ESP32</button><button id="sirenBtn" class="p">🔔 Enable siren</button><button id="muteBtn" style="display:none">🔇 Mute</button></div></div>
+
+<div class="mon" id="mon">
+<div class="al" id="al">● NORMAL</div>
+<div class="lane"><canvas id="c1"></canvas><div class="num" id="n1" style="color:#22c55e"><span class="l">ECG II · HR</span><span class="n" id="v1">--</span><span class="u">bpm</span></div></div>
+<div class="lane"><canvas id="c2"></canvas><div class="num" id="n2" style="color:#22d3ee"><span class="l">SpO₂ · PLETH</span><span class="n" id="v2">--</span><span class="u">%</span></div></div>
+<div class="lane"><canvas id="c3"></canvas><div class="num" id="n5" style="color:#fb923c"><span class="l">TEMP · TREND</span><span class="n" id="v5">--</span><span class="u">°C</span></div></div>
+</div>
+
+<div class="card"><h2>Sensor input</h2><div class="mu" style="margin-bottom:8px" id="src">Sensors offline → simulated. Test the alarm:</div>
+<div class="row"><button id="e1">⚠️ Warning</button><button id="e2" class="d">🚨 Emergency</button><button id="e0">✅ Normal</button></div>
+<div class="row"><input id="mhr" type="number" placeholder="HR (bpm)"><input id="msp" type="number" placeholder="SpO₂ (%)"><input id="mtp" type="number" step="0.1" placeholder="Temp (°C)"></div>
+<div class="row"><button id="mset" class="p">✏️ Apply readings</button><button id="mclr">↩️ Back to auto</button></div>
+<div class="row"><input id="cmd" placeholder="Type to ESP32: hr 120 · spo2 90 · temp 38.5 · auto"><button id="cmdBtn" class="p">Send</button></div></div>
+
+<div class="card"><h2>Caretaker SMS (daily 12:00 PM + emergencies)</h2>
+<div class="row"><input id="pn" placeholder="Patient name" value="Patient"><input id="ph" placeholder="Caretaker phone(s): +91XXXXXXXXXX, +91YYYYYYYYYY"></div>
+<div class="row"><input id="api" placeholder="Backend URL e.g. http://192.168.1.5:5000"><button class="p" id="save">💾 Save</button></div>
+<div class="mu" id="saved" style="margin-bottom:8px"></div>
+<div class="row"><button class="p" id="gen">📄 Generate report</button><button id="snd">📲 Send SMS from my phone</button><button id="bk">☁️ Send report now</button></div>
+<div class="mu" id="sched"></div><div id="rep"></div></div>
+<div class="card"><h2>Alert log</h2><div id="log" class="mu">No alerts yet.</div></div>
+<div class="card"><h2>📈 Today's graphs (whole day)</h2><div id="gr"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const V={hr:{n:'Heart rate',u:'bpm',b:78,r:[50,60,100,120],d:0,c:'#ef4444',i:'❤️'},
+spo2:{n:'SpO₂',u:'%',b:98,r:[91,95,101,101],d:0,c:'#22d3ee',i:'🫁'},
+temp:{n:'Temperature',u:'°C',b:36.8,r:[35,36.1,37.5,38.5],d:1,c:'#fb923c',i:'🌡️'}};
+const K=Object.keys(V),K4=['hr','spo2','temp'],L=['Normal','Mid risk','High risk'],E=['NORMAL','MID RISK','HIGH RISK'],CL=['#22c55e','#f59e0b','#ef4444'];
+const cls=(k,x)=>{const r=V[k].r;return(x<r[0]||x>r[3])?2:(x<r[1]||x>r[2])?1:0};
+const rnd=()=>Math.random()-.5,g=(x,m,s)=>Math.exp(-((x-m)**2)/(2*s*s));
+const mk=()=>Array.from({length:24},()=>({n:0,a:0,c:[0,0,0],s:{hr:0,spo2:0,temp:0}}));
+const dayKey=(d=new Date())=>d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+let mode=0,cur={},alerts=[],lastSt=0,sentDay='',lastSms=0,hours=mk();
+K.forEach(k=>cur[k]=V[k].b);
+// keep each day's data in the browser so today can be compared with yesterday
+const ld=d=>{try{const j=JSON.parse(localStorage.getItem('sh_d_'+d));return Array.isArray(j)&&j.length==24?j:null}catch(e){return null}};
+hours=ld(dayKey())||hours;hours.forEach(o=>{o.c=o.c||[0,0,0]});
+let curDay=dayKey(),prev=ld(dayKey(new Date(Date.now()-864e5)));
+function rollover(){const k=dayKey();if(k!=curDay){prev=hours;hours=mk();curDay=k}}
+
+// remember phone / name / backend URL
+['pn','ph','api'].forEach(id=>{try{const v=localStorage.getItem('sh_'+id);if(v)$(id).value=v}catch(e){}$(id).oninput=()=>{try{localStorage.setItem('sh_'+id,$(id).value)}catch(e){}}});
+const showSaved=()=>{const p=$('ph').value.trim();$('saved').textContent=p?'✅ Auto-SMS goes to '+p+' (edit anytime, then tap Save)':'⚠️ No caretaker number saved yet'};
+$('save').onclick=async()=>{['pn','ph','api'].forEach(id=>{try{localStorage.setItem('sh_'+id,$(id).value)}catch(e){}});showSaved();
+ const u=$('api').value.trim().replace(/\/$/,'');
+ if(u)try{await fetch(u+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:$('ph').value.trim()})});note('💾 Number saved on dashboard + backend')}catch(e){note('💾 Saved on dashboard (backend unreachable)')}
+ else note('💾 Saved on dashboard – add backend URL to enable SMS')};
+showSaved();
+const renderLog=()=>$('log').innerHTML=alerts.length?alerts.map(a=>'<div>'+a+'</div>').join(''):'No alerts yet.';
+const note=t=>{alerts.unshift(new Date().toLocaleTimeString()+' '+t);alerts=alerts.slice(0,8);renderLog()};
+
+// ---------- ESP32 live data (Web Serial, 115200 baud) ----------
+// protocol: E,raw,leadsOff | H,bpm | O,spo2 | T,tempC
+let live={},liveT={},eq=[],lastE=0,port;
+const isLive=()=>Date.now()-lastE<2000;
+const fresh=k=>liveT[k]&&Date.now()-liveT[k]<4000;
+$('espBtn').onclick=async()=>{
+ if(!navigator.serial)return alert('Web Serial needs Chrome or Edge (desktop, or Android with USB).');
+ try{port=await navigator.serial.requestPort();await port.open({baudRate:115200});$('espBtn').textContent='🔌 ESP32 connected';note('🔌 ESP32 connected');readLoop()}catch(e){}};
+async function readLoop(){
+ const dec=new TextDecoderStream();port.readable.pipeTo(dec.writable).catch(()=>{});const rd=dec.readable.getReader();let buf='';
+ try{for(;;){const{value,done}=await rd.read();if(done)break;buf+=value;let i;while((i=buf.indexOf('\n'))>=0){parse(buf.slice(0,i).trim());buf=buf.slice(i+1)}}}catch(e){}
+ $('espBtn').textContent='🔌 Connect ESP32';note('🔌 ESP32 disconnected')}
+function parse(l){const p=l.split(','),t=Date.now();
+ if(p[0]=='E'){const r=+p[1];if(!isNaN(r)){eq.push(p[2]=='1'?0:(r-2048)/1500);if(eq.length>120)eq.splice(0,eq.length-120);lastE=t}}
+ else if(p[0]=='H'||p[0]=='O'||p[0]=='T'){const k={H:'hr',O:'spo2',T:'temp'}[p[0]],v=parseFloat(p[1]);if(!isNaN(v)){live[k]=v;liveT[k]=t}}}
+
+// manual readings (for presentation) – override live/simulated values; blank boxes stay as they are
+const man={};
+$('mset').onclick=()=>{[['hr','mhr'],['spo2','msp'],['temp','mtp']].forEach(([k,id])=>{const v=parseFloat($(id).value);if(!isNaN(v)){man[k]=v;cur[k]=v}});note('✏️ Manual readings applied');tick()};
+$('mclr').onclick=()=>{for(const k in man)delete man[k];['mhr','msp','mtp'].forEach(id=>$(id).value='');note('↩️ Back to auto readings')};
+
+// type readings (acts like the Serial Monitor)
+async function sendCmd(){const t=$('cmd').value.trim();if(!t)return;
+ if(!port||!port.writable)return alert('Tap "Connect ESP32" first.');
+ try{const w=port.writable.getWriter();await w.write(new TextEncoder().encode(t+'\n'));w.releaseLock();note('⌨️ Sent to ESP32: '+t);$('cmd').value=''}catch(e){note('❌ Could not send to ESP32')}}
+$('cmdBtn').onclick=sendCmd;$('cmd').onkeydown=e=>{if(e.key=='Enter')sendCmd()};
+
+// ---------- waveforms ----------
+const SPEED=80; // px/sec – slow sweep
+let ph=0;
+const ecg=()=>{const f=ph%1;let v=.12*g(f,.16,.025)-.12*g(f,.255,.008)+1*g(f,.27,.01)-.25*g(f,.285,.01)+.28*g(f,.5,.05);
+ if(mode==2)v+=rnd()*.12;return v-.1};
+const pleth=()=>{const f=(ph-.3+1)%1;return (g(f,.15,.08)+.25*g(f,.4,.06))*Math.max(.3,(cur.spo2-80)/20)*1.1-.45};
+const temp=()=>Math.max(-.9,Math.min(.9,(cur.temp-37)*.45));
+const lanes=[{id:'c1',col:'#22c55e',f:ecg},{id:'c2',col:'#22d3ee',f:pleth},{id:'c3',col:'#fb923c',f:temp}];
+function setup(){lanes.forEach(l=>{const c=$(l.id),d=devicePixelRatio||1;c.width=c.clientWidth*d;c.height=c.clientHeight*d;l.ctx=c.getContext('2d');l.ctx.setTransform(d,0,0,d,0,0);l.W=c.clientWidth;l.H=c.clientHeight;l.x=0;l.y=l.H/2;l.ctx.lineWidth=2;l.ctx.lineJoin='round'})}
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;ph+=dt*cur.hr/60;
+ lanes.forEach(l=>{const c=l.ctx;let pts;
+  if(l.id=='c1'&&isLive()){const n=Math.max(1,Math.round(dt*200));pts=[];for(let j=0;j<n;j++)pts.push(eq.length?eq.shift():(l.lv||0));l.lv=pts[pts.length-1]}
+  else pts=[l.f()];
+  const st=dt*SPEED/pts.length;
+  pts.forEach(v=>{const nx=l.x+st,y=l.H/2-v*l.H*.38;c.clearRect(nx,0,18,l.H);
+   if(nx>=l.W){c.clearRect(0,0,18,l.H);l.x=0;l.y=y;return}
+   c.strokeStyle=l.col;c.beginPath();c.moveTo(l.x,l.y);c.lineTo(nx,y);c.stroke();l.x=nx;l.y=y})});
+ requestAnimationFrame(frame)}
+
+// ---------- SMS (via backend → normal SMS) ----------
+async function sendSms(path,message,tag){
+ const u=$('api').value.trim().replace(/\/$/,''),p=$('ph').value.trim();
+ if(!u||!p){note('⚠️ '+tag+' SMS NOT sent – enter phone + backend URL');return false}
+ try{const r=await fetch(u+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p,message})});
+  note(r.ok?'📲 '+tag+' SMS sent':'❌ '+tag+' SMS failed ('+r.status+')');return r.ok}
+ catch(e){note('❌ '+tag+' SMS failed – backend unreachable');return false}}
+
+// ---------- vitals ----------
+const target=k=>man[k]!=null?man[k]:fresh(k)?live[k]:mode==2?{hr:135,spo2:86,temp:39.2}[k]:mode==1?{hr:108,spo2:93,temp:37.9}[k]:V[k].b;
+function tick(){
+ rollover();
+ K.forEach(k=>{const v=V[k],step=k=='temp'?.08:k=='hr'?3:1;
+  cur[k]+=(target(k)-cur[k])*.3+(fresh(k)||man[k]!=null?0:rnd()*step*(mode?.5:1));if(k=='spo2')cur[k]=Math.min(100,cur[k]);cur[k]=+cur[k].toFixed(v.d)});
+ $('src').textContent=Object.keys(man).length?'✏️ Manual override: '+Object.keys(man).map(k=>V[k].n+' '+man[k]).join(', ')+' (tap Reset to go back)':isLive()?'🟢 ESP32 live data (HR, SpO₂, Temp, ECG)':'Sensors offline → simulated. Test the alarm:';
+ let st=0;K.forEach(k=>st=Math.max(st,cls(k,cur[k])));
+ const o=hours[new Date().getHours()];o.n++;K4.forEach(k=>o.s[k]+=cur[k]);if(st==2&&lastSt!=2)o.a++;o.c[st]++;
+ const msgs=K.filter(k=>cls(k,cur[k])).map(k=>{const r=V[k].r,low=cur[k]<r[1];return V[k].n.toUpperCase()+(low?' LOW':' HIGH')});
+ if(st!=lastSt){if(st){alerts.unshift(new Date().toLocaleTimeString()+' '+E[st]+' '+msgs.join(', '));alerts=alerts.slice(0,8)}lastSt=st;renderLog()}
+ // emergency → SMS to caretaker (max once per 5 min)
+ if(st==2&&Date.now()-lastSms>300000){lastSms=Date.now();
+  sendSms('/send_sms',`SAHASEC HIGH RISK ALERT: ${$('pn').value||'Patient'} - ${msgs.join(', ')}. HR ${cur.hr}, SpO2 ${cur.spo2}%, Temp ${cur.temp.toFixed(1)}C. Please check immediately.`,'Emergency')}
+ const set=(i,k,t)=>{$('v'+i).textContent=t;$('n'+i).classList.toggle('bad',cls(k,cur[k])>0)};
+ set(1,'hr',cur.hr);set(2,'spo2',cur.spo2);set(5,'temp',cur.temp.toFixed(1));
+ $('al').className='al'+(st==2?' r':st==1?' y':'');$('al').textContent=st?'*** '+msgs.join(' · ')+' ***':'● NORMAL';
+ $('mon').classList.toggle('alarm',st==2);if(st==2)latch=1;else if(st==0)latch=0;siren(latch);try{localStorage.setItem('sh_d_'+curDay,JSON.stringify(hours))}catch(e){}}
+
+// ---------- siren ----------
+let ac,osc,iv,armed=false,muted=false,latch=0; // siren keeps sounding from High risk until status is back to Normal
+function beep(){const o=ac.createOscillator(),G=ac.createGain();G.gain.value=.25;o.connect(G);G.connect(ac.destination);o.type='square';o.frequency.value=800;o.start();setTimeout(()=>o.stop(),500)}
+$('sirenBtn').onclick=()=>{ac=ac||new(window.AudioContext||window.webkitAudioContext)();if(ac.resume)ac.resume();armed=true;beep();$('sirenBtn').textContent='🔔 Siren armed (you should hear a beep)';$('muteBtn').style.display=''};
+$('muteBtn').onclick=()=>{muted=!muted;$('muteBtn').textContent=muted?'🔊 Unmute':'🔇 Mute';if(muted)siren(false)};
+function siren(on){if(armed&&ac.state=='suspended')ac.resume();if(on&&armed&&!muted&&!osc){osc=ac.createOscillator();const G=ac.createGain();G.gain.value=.25;osc.connect(G);G.connect(ac.destination);osc.type='square';osc.start();let f=0;iv=setInterval(()=>osc.frequency.value=(f=!f)?620:900,450)}
+ else if((!on||muted)&&osc){clearInterval(iv);osc.stop();osc=null}}
+
+// ---------- report ----------
+const avg=(o,k)=>o.n?o.s[k]/o.n:null;
+// graph style: white panel, black L-shaped axes with ticks, square markers joined by a line, value label on every point
+function chart(k){const pts=[];for(let h=0;h<24;h++){const a=avg(hours[h],k);if(a!=null)pts.push([h,a])}
+ const r=V[k].r,all=pts.map(p=>p[1]);
+ let mn=all.length?Math.min(...all):r[1],mx=all.length?Math.max(...all):r[2];if(mx-mn<1e-9){mn-=1;mx+=1}
+ const raw=(mx-mn)/4,p10=Math.pow(10,Math.floor(Math.log10(raw))),st=[1,2,5,10].map(m=>m*p10).find(s=>s>=raw-1e-9);
+ const lo=Math.floor(mn/st+1e-9)*st;let hi=Math.ceil(mx/st-1e-9)*st;if(hi-mx<st*.35)hi+=st;
+ const X=h=>58+h/23*406,Y=v=>150-(v-lo)/(hi-lo)*136,fx=st<1?1:0,col=V[k].c;
+ const lastV=pts.length?pts[pts.length-1][1]:null,sc=lastV==null?0:cls(k,lastV);
+ const head=`<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px"><b>${V[k].i} ${V[k].n} (${V[k].u})</b><span class="mu">${lastV==null?'waiting for readings…':'latest hourly avg '+lastV.toFixed(V[k].d)+' · '+E[sc]}</span></div>`;
+ let yt='';for(let v=lo;v<=hi+st*.01;v+=st)yt+=`<line x1="45" x2="50" y1="${Y(v)}" y2="${Y(v)}" stroke="#111"/><text x="41" y="${Y(v)+3}" font-size="9" fill="#111" text-anchor="end">${v.toFixed(fx)}</text>`;
+ let xt='';for(let h=0;h<24;h++)xt+=`<line x1="${X(h)}" x2="${X(h)}" y1="150" y2="155" stroke="#111"/>`+(h%2==0?`<text x="${X(h)}" y="167" font-size="9" fill="#111" text-anchor="middle">${t12(h)}</text>`:'');
+ const line=pts.length>1?`<polyline fill="none" stroke="${col}" stroke-width="2.2" points="${pts.map(p=>X(p[0])+','+Y(p[1])).join(' ')}"/>`:'';
+ const dots=pts.map(p=>`<rect x="${X(p[0])-3.5}" y="${Y(p[1])-3.5}" width="7" height="7" fill="${col}"/><text x="${X(p[0])}" y="${Y(p[1])-8}" font-size="8" fill="#111" text-anchor="middle">${p[1].toFixed(V[k].d)}</text>`).join('');
+ return`<div style="margin-bottom:14px">${head}<div class="sc"><svg viewBox="0 0 480 182" style="min-width:480px;background:#fff;border:1px solid #9ca3af;border-radius:4px;margin-top:6px">
+ <line x1="50" x2="50" y1="8" y2="150" stroke="#111"/><line x1="50" x2="474" y1="150" y2="150" stroke="#111"/>
+ ${yt}${xt}${line}${dots}
+ <text transform="translate(10 80) rotate(-90)" font-size="10" font-weight="700" fill="#111" text-anchor="middle">${V[k].u}</text></svg></div><div class="mu">1 point = 1 hour average · normal range ${r[1]}–${r[2]}${V[k].u}</div></div>`}
+const renderGraphs=()=>{$('gr').innerHTML=K4.map(k=>chart(k)).join('')};
+const SP='▁▂▃▄▅▆▇█',TH={hr:5,spo2:1,temp:.3},t12=h=>(h%12||12)+(h<12?'am':'pm');
+function spark(k,from,to){let s='',f=null,l=null;const r=V[k].r;for(let h=from;h<=to;h++){const a=avg(hours[h],k);if(a==null){s+='·';continue}if(f==null)f=a;l=a;s+=SP[Math.round(Math.max(0,Math.min(1,(a-r[0])/(r[3]-r[0])))*7)]}return{s,f,l}}
+const tr=(k,f,l)=>f==null?'':Math.abs(l-f)<TH[k]?'➡️':l>f?'📈':'📉';
+function report(){const now=new Date(),upto=now.getHours();
+ const T={n:0,s:{hr:0,spo2:0,temp:0}};let al=0,hi=[],c0=0;
+ for(let h=0;h<=upto;h++){const o=hours[h];T.n+=o.n;c0+=o.c[0];K4.forEach(k=>T.s[k]+=o.s[k]);al+=o.a;if(o.a>0)hi.push(t12(h))}
+ const A={};K4.forEach(k=>A[k]=+(T.n?T.s[k]/T.n:cur[k]).toFixed(V[k].d));
+ const P={n:0,c0:0,s:{hr:0,spo2:0,temp:0}};if(prev)for(let h=0;h<=upto;h++){const o=prev[h];P.n+=o.n;P.c0+=(o.c?o.c[0]:0);K4.forEach(k=>P.s[k]+=o.s[k])}
+ const tN=T.n?c0/T.n*100:null,pN=P.n?P.c0/P.n*100:null;
+ let rec='Recovery vs yesterday: no data yet (needs 2 days)';
+ if(tN!=null&&pN!=null){const d=tN-pN;rec=`Recovery vs yesterday: ${d>=0?'+':''}${d.toFixed(0)}% ${d>2?'📈 improving':d<-2?'📉 worse':'➡️ same'}\nNormal time: ${tN.toFixed(0)}% today | ${pN.toFixed(0)}% yesterday`}
+ let st=0;K4.forEach(k=>st=Math.max(st,cls(k,A[k])));if(K4.some(k=>cls(k,cur[k])==2))st=2;if(al>0)st=Math.max(st,1);if(al>=3)st=2;
+ let s=`SAHASEC DAILY REPORT\n${now.toLocaleDateString(undefined,{day:'2-digit',month:'short'})} | ${$('pn').value||'Patient'}\nSTATUS: ${E[st]}\n${rec}\n`;
+ K4.forEach(k=>{const p=spark(k,0,23),y=P.n?` (yesterday ${+(P.s[k]/P.n).toFixed(V[k].d)})`:'';s+=`\n${V[k].n}: ${A[k]}${V[k].u}${y} ${tr(k,p.f,p.l)} ${E[cls(k,A[k])]}\n${p.s}\n`});
+ s+=`(12am to 11pm, 1 bar = 1 hour)\n\nHigh-risk alerts: ${al}`+(hi.length?` at ${hi.join(', ')}`:'')+`\n`+(st?'Please check on the patient.':'No action needed.');
+ $('rep').innerHTML=`<div class="banner s${st}"><span>Status: ${L[st]}</span><span>${al} high-risk alerts</span></div><div class="mu" style="margin-top:6px;white-space:pre-line">${rec}</div>`+`<div class="mu" style="margin-top:8px">SMS preview:</div><pre>${s}</pre>`;renderGraphs();return s}
+$('gen').onclick=report;
+$('snd').onclick=()=>{const s=report(),p=$('ph').value.trim();if(!p)return alert('Enter caretaker phone first');location.href='sms:'+p.split(/[,;\s]+/)[0].replace(/[^+\d]/g,'')+'?body='+encodeURIComponent(s)};
+$('bk').onclick=()=>sendSms('/send_report',report(),'Report');
+['e0','e1','e2'].forEach((id,i)=>$(id).onclick=()=>mode=i);
+
+// send live readings (+phone) to backend every 5s so the backup 12 PM job has data
+setInterval(()=>{const u=$('api').value.trim().replace(/\/$/,'');if(u)fetch(u+'/vitals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...cur,phone:$('ph').value.trim()})}).catch(()=>{})},5000);
+
+function clock(){const n=new Date();$('clock').textContent=n.toLocaleString();const nx=new Date(n);nx.setHours(12,0,0,0);if(n>nx)nx.setDate(nx.getDate()+1);
+ $('sched').textContent='Next 12 PM report: '+nx.toLocaleString()+' (sent automatically as SMS)';
+ const key=n.toDateString();
+ if(n.getHours()==12&&n.getMinutes()==0&&sentDay!=key){sentDay=key;note('🕛 12 PM report generated');sendSms('/send_report',report(),'Daily report')}}
+window.onresize=setup;setup();requestAnimationFrame(frame);setInterval(tick,1000);setInterval(clock,1000);tick();clock();renderGraphs();setInterval(renderGraphs,10000);
+</script></body></html>
